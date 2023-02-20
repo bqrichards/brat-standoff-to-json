@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -25,6 +27,7 @@ const (
 	ErrNoEntities                           = "the conf file does not have an `[entities]` field or `[entities]` field is empty"
 	ErrMultipleConfFilesFound               = "multiple `annotation.conf` files found"
 	ErrDiscontinuosTextboundAnnNotSupported = "discontinuous text-bound annotations is not currently supported"
+	ErrCouldntRewindConfig                  = "the conf file could no be rewound"
 
 	ErrSubStrNegativeStartPos         = "start position should be a positive number, Received start position %d"
 	ErrSubStrEndPosSmallerThanStart   = "end position should be greater than start position, Received end position %d"
@@ -55,6 +58,19 @@ func exit1() {
 	os.Exit(1)
 }
 
+type CustomRelation struct {
+	BeginParent int
+	EndParent   int
+	BeginChild  int
+	EndChild    int
+	Name        string
+}
+
+type NumberCustomRelation struct {
+	TxtAnnNo int
+	Entity   CustomRelation
+}
+
 type AcharyaEntity struct {
 	Begin int
 	End   int
@@ -64,6 +80,22 @@ type AcharyaEntity struct {
 type NumberAcharyaEntity struct {
 	TxtAnnNo int
 	Entity   AcharyaEntity
+}
+
+func firstWords(value string, count int) string {
+	// Loop over all indexes in the string.
+	for i := range value {
+		// If we encounter a space, reduce the count.
+		if value[i] == ' ' || value[i] == '\t' || value[i] == '\n' {
+			count -= 1
+			// When no more words required, return a substring.
+			if count == 0 {
+				return value[0:i]
+			}
+		}
+	}
+	// Return the entire string.
+	return value
 }
 
 func GetSubString(originalString string, startPos, endPos int) (string, error) {
@@ -120,6 +152,33 @@ func GetEntitiesFromFile(confFile *os.File) map[string]bool {
 		}
 	}
 	return entities
+}
+
+func GetRelationsFromFile(confFile *os.File) map[string]bool {
+	scanner := bufio.NewScanner(confFile)
+	scanner.Split(bufio.ScanLines)
+	startScan := false
+	relations := make(map[string]bool)
+
+	for scanner.Scan() {
+		a := scanner.Text()
+		if strings.Contains(a, "[relations]") {
+			startScan = true
+			continue
+		}
+		if startScan {
+			if len(strings.TrimSpace(scanner.Text())) == 0 {
+				continue
+			}
+			if strings.HasPrefix(scanner.Text(), "[") {
+				break
+			} else if strings.HasPrefix(scanner.Text(), "#") {
+				continue
+			}
+			relations[firstWords(strings.TrimSpace(scanner.Text()), 1)] = true
+		}
+	}
+	return relations
 }
 
 func GetSubDirectories(path string) ([]string, []string, error) {
@@ -182,7 +241,7 @@ func GenNumberEntityArr(entFromConf map[string]bool, aData *os.File) ([]NumberAc
 	numberEntityArr := []NumberAcharyaEntity{}
 
 	for scanner.Scan() {
-		// Uncomment the lines below to dispaly the ann file
+		// Uncomment the lines below to display the ann file
 		// fmt.Println(strings.Repeat("#", 30), "Annotations", strings.Repeat("#", 30))
 		// fmt.Println(scanner.Text())
 		if strings.HasPrefix(scanner.Text(), "T") {
@@ -222,7 +281,40 @@ func GenNumberEntityArr(entFromConf map[string]bool, aData *os.File) ([]NumberAc
 	return numberEntityArr, nil
 }
 
-func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt []NumberAcharyaEntity) (string, string, error) {
+func GenNumberRelationArr(relFromConf map[string]bool, numberEntityArr []NumberAcharyaEntity, aData *os.File) ([]NumberCustomRelation, error) {
+	scanner := bufio.NewScanner(aData)
+	scanner.Split(bufio.ScanLines)
+
+	numberRelationArr := []NumberCustomRelation{}
+	regex := *regexp.MustCompile(`R(\d+)\s+(\w+) Arg1:T(\d+) Arg2:T(\d+)`)
+
+	for scanner.Scan() {
+		// Uncomment the lines below to display the ann file
+		// fmt.Println(strings.Repeat("#", 30), "Annotations", strings.Repeat("#", 30))
+		// fmt.Println(scanner.Text())
+		if strings.HasPrefix(scanner.Text(), "R") {
+			res := regex.FindAllStringSubmatch(scanner.Text(), -1)
+			if len(res) > 0 {
+				rel_num, _ := strconv.Atoi(res[0][1])
+				name := res[0][2]
+				arg1, _ := strconv.Atoi(res[0][3])
+				arg2, _ := strconv.Atoi(res[0][4])
+
+				// Get begin and end from arg1 and arg2 and numberEntityArr
+				begin_parent := numberEntityArr[arg1-1].Entity.Begin
+				end_parent := numberEntityArr[arg1-1].Entity.End
+				begin_child := numberEntityArr[arg2-1].Entity.Begin
+				end_child := numberEntityArr[arg2-1].Entity.End
+
+				numberRelationArr = append(numberRelationArr, NumberCustomRelation{rel_num, CustomRelation{begin_parent, end_parent, begin_child, end_child, name}})
+			}
+		}
+	}
+
+	return numberRelationArr, nil
+}
+
+func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt []NumberAcharyaEntity, numberRelationArr []NumberCustomRelation) (string, string, error) {
 	standoff := ""
 	// It is necessary to marshal string as to avoid problems by escape sequences
 	escapedStr, err := json.Marshal(tData)
@@ -300,6 +392,13 @@ func handleMain(fPath, annFiles, txtFiles, conf, opFile string, overwrite bool) 
 		return errors.New(ErrNoEntities)
 	}
 
+	_, err = confFile.Seek(0, io.SeekStart)
+	if err != nil {
+		return errors.New(ErrCouldntRewindConfig)
+	}
+
+	relations := GetRelationsFromFile(confFile)
+
 	if fPath == "" {
 		annMult = strings.Split(annFiles, ",")
 		textMult = strings.Split(txtFiles, ",")
@@ -330,7 +429,17 @@ func handleMain(fPath, annFiles, txtFiles, conf, opFile string, overwrite bool) 
 			return err
 		}
 
-		acharya, _, err := GenerateAcharyaAndStandoff(string(txtFileData), entityArr)
+		_, err = annFile.Seek(0, io.SeekStart)
+		if err != nil {
+			return errors.New(ErrCouldntRewindConfig)
+		}
+
+		relArr, err := GenNumberRelationArr(relations, entityArr, annFile)
+		if err != nil {
+			return err
+		}
+
+		acharya, _, err := GenerateAcharyaAndStandoff(string(txtFileData), entityArr, relArr)
 		if err != nil {
 			return err
 		}
