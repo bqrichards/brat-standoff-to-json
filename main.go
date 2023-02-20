@@ -59,11 +59,13 @@ func exit1() {
 }
 
 type CustomRelation struct {
-	BeginParent int
-	EndParent   int
-	BeginChild  int
-	EndChild    int
-	Name        string
+	HeadAnnNo int
+	BeginHead int
+	EndHead   int
+	TailAnnNo int
+	BeginTail int
+	EndTail   int
+	Name      string
 }
 
 type NumberCustomRelation struct {
@@ -306,7 +308,7 @@ func GenNumberRelationArr(relFromConf map[string]bool, numberEntityArr []NumberA
 				begin_child := numberEntityArr[arg2-1].Entity.Begin
 				end_child := numberEntityArr[arg2-1].Entity.End
 
-				numberRelationArr = append(numberRelationArr, NumberCustomRelation{rel_num, CustomRelation{begin_parent, end_parent, begin_child, end_child, name}})
+				numberRelationArr = append(numberRelationArr, NumberCustomRelation{rel_num, CustomRelation{arg1, begin_parent, end_parent, arg2, begin_child, end_child, name}})
 			}
 		}
 	}
@@ -331,6 +333,14 @@ func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt []NumberAcharyaEn
 		}
 		standoff = standoff + fmt.Sprintf("T%d\t%s %d %d\t%s\n", v.TxtAnnNo, v.Entity.Name, v.Entity.Begin, v.Entity.End, str)
 		acharya = acharya + fmt.Sprintf("[%d,%d,\"%s\"],", v.Entity.Begin, v.Entity.End, v.Entity.Name)
+	}
+
+	acharya = strings.TrimSuffix(acharya, ",")
+	acharya = acharya + "],\"Relations\":["
+
+	for _, v := range numberRelationArr {
+		standoff = standoff + fmt.Sprintf("R%d\t%s Arg1:T%d Arg2:T%d\t\n", v.TxtAnnNo, v.Entity.Name, v.Entity.HeadAnnNo, v.Entity.TailAnnNo)
+		acharya = acharya + fmt.Sprintf("{\"head\": [%d,%d],\"tail\":[%d,%d],\"name\": \"%s\"},", v.Entity.BeginHead, v.Entity.EndHead, v.Entity.BeginTail, v.Entity.EndTail, v.Entity.Name)
 	}
 
 	standoff = strings.TrimSuffix(standoff, "\n")
