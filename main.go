@@ -455,8 +455,9 @@ func handleMain(fPath, annFiles, txtFiles, conf, opFile string, overwrite bool) 
 		}
 
 		generatedAcharya = generatedAcharya + acharya
-
 	}
+
+	generatedAcharya = strings.TrimSuffix(generatedAcharya, "\n")
 
 	if opFile == "" {
 		fmt.Println(generatedAcharya)
