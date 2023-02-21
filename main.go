@@ -236,11 +236,11 @@ func GetTextAnnNum(ann string) (int, error) {
 	return 0, errors.New(ErrTxtAnnBadFormat)
 }
 
-func GenNumberEntityArr(entFromConf map[string]bool, aData *os.File) ([]NumberAcharyaEntity, error) {
+func GenNumberEntityMap(entFromConf map[string]bool, aData *os.File) (map[int]NumberAcharyaEntity, error) {
 	scanner := bufio.NewScanner(aData)
 	scanner.Split(bufio.ScanLines)
 
-	numberEntityArr := []NumberAcharyaEntity{}
+	numberEntityMap := make(map[int]NumberAcharyaEntity)
 
 	for scanner.Scan() {
 		// Uncomment the lines below to display the ann file
@@ -250,40 +250,40 @@ func GenNumberEntityArr(entFromConf map[string]bool, aData *os.File) ([]NumberAc
 			splitAnn := strings.Split(scanner.Text(), "\t")
 			if len(splitAnn) == 3 {
 				if strings.Contains(splitAnn[1], ";") {
-					return []NumberAcharyaEntity{}, errors.New(ErrDiscontinuosTextboundAnnNotSupported)
+					return make(map[int]NumberAcharyaEntity), errors.New(ErrDiscontinuosTextboundAnnNotSupported)
 				}
 				entAndPos := strings.Split(splitAnn[1], " ")
 				if (len(entAndPos)) == 3 {
 					if entFromConf[strings.TrimSpace(entAndPos[0])] {
 						b, err := strconv.Atoi(entAndPos[1])
 						if err != nil {
-							return []NumberAcharyaEntity{}, err
+							return make(map[int]NumberAcharyaEntity), err
 						}
 						e, err := strconv.Atoi(entAndPos[2])
 						if err != nil {
-							return []NumberAcharyaEntity{}, err
+							return make(map[int]NumberAcharyaEntity), err
 						}
 
 						annotationNo, err := GetTextAnnNum(scanner.Text())
 						if err != nil {
-							return []NumberAcharyaEntity{}, err
+							return make(map[int]NumberAcharyaEntity), err
 						}
 
-						numberEntityArr = append(numberEntityArr, NumberAcharyaEntity{annotationNo, AcharyaEntity{b, e, entAndPos[0]}})
+						numberEntityMap[annotationNo] = NumberAcharyaEntity{annotationNo, AcharyaEntity{b, e, entAndPos[0]}}
 					}
 				} else {
-					return numberEntityArr, errors.New(ErrBadFormat)
+					return numberEntityMap, errors.New(ErrBadFormat)
 				}
 			} else {
-				return numberEntityArr, errors.New(ErrBadFormatTab)
+				return numberEntityMap, errors.New(ErrBadFormatTab)
 			}
 		}
 	}
 
-	return numberEntityArr, nil
+	return numberEntityMap, nil
 }
 
-func GenNumberRelationArr(relFromConf map[string]bool, numberEntityArr []NumberAcharyaEntity, aData *os.File) ([]NumberCustomRelation, error) {
+func GenNumberRelationArr(relFromConf map[string]bool, numberEntityMap map[int]NumberAcharyaEntity, aData *os.File) ([]NumberCustomRelation, error) {
 	scanner := bufio.NewScanner(aData)
 	scanner.Split(bufio.ScanLines)
 
@@ -303,10 +303,10 @@ func GenNumberRelationArr(relFromConf map[string]bool, numberEntityArr []NumberA
 				arg2, _ := strconv.Atoi(res[0][4])
 
 				// Get begin and end from arg1 and arg2 and numberEntityArr
-				begin_parent := numberEntityArr[arg1-1].Entity.Begin
-				end_parent := numberEntityArr[arg1-1].Entity.End
-				begin_child := numberEntityArr[arg2-1].Entity.Begin
-				end_child := numberEntityArr[arg2-1].Entity.End
+				begin_parent := numberEntityMap[arg1].Entity.Begin
+				end_parent := numberEntityMap[arg1].Entity.End
+				begin_child := numberEntityMap[arg2].Entity.Begin
+				end_child := numberEntityMap[arg2].Entity.End
 
 				numberRelationArr = append(numberRelationArr, NumberCustomRelation{rel_num, CustomRelation{arg1, begin_parent, end_parent, arg2, begin_child, end_child, name}})
 			}
@@ -316,7 +316,7 @@ func GenNumberRelationArr(relFromConf map[string]bool, numberEntityArr []NumberA
 	return numberRelationArr, nil
 }
 
-func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt []NumberAcharyaEntity, numberRelationArr []NumberCustomRelation, article_id string, isTestFile bool) (string, string, error) {
+func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt map[int]NumberAcharyaEntity, numberRelationArr []NumberCustomRelation, article_id string, isTestFile bool) (string, string, error) {
 	standoff := ""
 	// It is necessary to marshal string as to avoid problems by escape sequences
 	escapedStr, err := json.Marshal(tData)
@@ -330,7 +330,7 @@ func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt []NumberAcharyaEn
 		test_str = "\"test\":true,"
 	}
 
-	acharya := fmt.Sprintf("{\"id\":\"%s\", %s\"Data\":%s, \"Entities\":[", article_id, test_str, fmt.Sprintf("%s", escapedStr))
+	acharya := fmt.Sprintf("{\"id\":\"%s\",%s\"Data\":%s,\"Entities\":[", article_id, test_str, fmt.Sprintf("%s", escapedStr))
 
 	for _, v := range numberAcharyaEnt {
 		str, err := GetSubString(tData, v.Entity.Begin, v.Entity.End)
@@ -444,7 +444,7 @@ func handleMain(fPath, annFiles, txtFiles, conf, opFile string, overwrite bool) 
 			return err
 		}
 
-		entityArr, err := GenNumberEntityArr(entities, annFile)
+		entityMap, err := GenNumberEntityMap(entities, annFile)
 		if err != nil {
 			return err
 		}
@@ -454,12 +454,12 @@ func handleMain(fPath, annFiles, txtFiles, conf, opFile string, overwrite bool) 
 			return errors.New(ErrCouldntRewindConfig)
 		}
 
-		relArr, err := GenNumberRelationArr(relations, entityArr, annFile)
+		relArr, err := GenNumberRelationArr(relations, entityMap, annFile)
 		if err != nil {
 			return err
 		}
 
-		acharya, _, err := GenerateAcharyaAndStandoff(string(txtFileData), entityArr, relArr, filename, is_test_file)
+		acharya, _, err := GenerateAcharyaAndStandoff(string(txtFileData), entityMap, relArr, filename, is_test_file)
 		if err != nil {
 			return err
 		}

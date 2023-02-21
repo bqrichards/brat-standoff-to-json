@@ -321,7 +321,7 @@ func (suite *GenNumberEntityArrSuite) TestGenNumberEntityArr() {
 		annFile, aErr := os.Open(v.Input.AnnFilePath)
 		suite.Nil(aErr)
 
-		noEnt, err := GenNumberEntityArr(v.Input.EntityMap, annFile)
+		noEnt, err := GenNumberEntityMap(v.Input.EntityMap, annFile)
 		suite.Nil(err)
 		suite.Equal(noEnt, v.Expected)
 	}
@@ -332,7 +332,7 @@ func (suite *GenNumberEntityArrSuite) TestGenNumberEntityArrInvalid() {
 		annFile, aErr := os.Open(v.Input.AnnFilePath)
 		suite.Nil(aErr)
 
-		noEnt, err := GenNumberEntityArr(v.Input.EntityMap, annFile)
+		noEnt, err := GenNumberEntityMap(v.Input.EntityMap, annFile)
 		suite.NotNil(err)
 		suite.Equal(noEnt, v.Expected)
 	}
@@ -341,7 +341,7 @@ func (suite *GenNumberEntityArrSuite) TestGenNumberEntityArrInvalid() {
 type GenerateAcharyaAndStandoffTest struct {
 	Input struct {
 		Data             string
-		NumberAcharyaEnt []NumberAcharyaEntity
+		NumberAcharyaEnt map[int]NumberAcharyaEntity
 	}
 	Expected struct {
 		Acharya  string
@@ -359,7 +359,7 @@ func (suite *GenerateAcharyaAndStandoffSuite) SetupTest() {
 
 	type TestInput struct {
 		Data             string
-		NumberAcharyaEnt []NumberAcharyaEntity
+		NumberAcharyaEnt map[int]NumberAcharyaEntity
 	}
 
 	type TestExpected struct {
@@ -370,7 +370,7 @@ func (suite *GenerateAcharyaAndStandoffSuite) SetupTest() {
 	suite.TestData = []GenerateAcharyaAndStandoffTest{
 		{Input: TestInput{
 			"Hello world",
-			[]NumberAcharyaEntity{{TxtAnnNo: 1, Entity: AcharyaEntity{Begin: 0, End: 1, Name: "Organization"}}},
+			map[int]NumberAcharyaEntity{1: {TxtAnnNo: 1, Entity: AcharyaEntity{Begin: 0, End: 1, Name: "Organization"}}},
 		},
 			Expected: TestExpected{"{\"Data\":\"Hello world\",\"Entities\":[[0,1,\"Organization\"]]}\n", "T1\tOrganization 0 1\tH"},
 		},
@@ -379,7 +379,7 @@ func (suite *GenerateAcharyaAndStandoffSuite) SetupTest() {
 	suite.TestDataInvalid = []GenerateAcharyaAndStandoffTest{
 		{Input: TestInput{
 			"End position is larger",
-			[]NumberAcharyaEntity{{TxtAnnNo: 1, Entity: AcharyaEntity{Begin: 0, End: 1000, Name: "Organization"}}},
+			map[int]NumberAcharyaEntity{1: {TxtAnnNo: 1, Entity: AcharyaEntity{Begin: 0, End: 1000, Name: "Organization"}}},
 		},
 			Expected: TestExpected{"", ""},
 		},
