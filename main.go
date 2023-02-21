@@ -316,7 +316,7 @@ func GenNumberRelationArr(relFromConf map[string]bool, numberEntityArr []NumberA
 	return numberRelationArr, nil
 }
 
-func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt []NumberAcharyaEntity, numberRelationArr []NumberCustomRelation) (string, string, error) {
+func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt []NumberAcharyaEntity, numberRelationArr []NumberCustomRelation, article_id string, isTestFile bool) (string, string, error) {
 	standoff := ""
 	// It is necessary to marshal string as to avoid problems by escape sequences
 	escapedStr, err := json.Marshal(tData)
@@ -324,7 +324,13 @@ func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt []NumberAcharyaEn
 		return "", "", err
 	}
 
-	acharya := fmt.Sprintf("{\"Data\":%s,\"Entities\":[", fmt.Sprintf("%s", escapedStr))
+	// Add "test": true if filename starts with t_ prefix
+	test_str := ""
+	if isTestFile {
+		test_str = "\"test\":true,"
+	}
+
+	acharya := fmt.Sprintf("{\"id\":\"%s\", %s\"Data\":%s, \"Entities\":[", article_id, test_str, fmt.Sprintf("%s", escapedStr))
 
 	for _, v := range numberAcharyaEnt {
 		str, err := GetSubString(tData, v.Entity.Begin, v.Entity.End)
@@ -340,7 +346,7 @@ func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt []NumberAcharyaEn
 
 	for _, v := range numberRelationArr {
 		standoff = standoff + fmt.Sprintf("R%d\t%s Arg1:T%d Arg2:T%d\t\n", v.TxtAnnNo, v.Entity.Name, v.Entity.HeadAnnNo, v.Entity.TailAnnNo)
-		acharya = acharya + fmt.Sprintf("{\"head\": [%d,%d],\"tail\":[%d,%d],\"name\": \"%s\"},", v.Entity.BeginHead, v.Entity.EndHead, v.Entity.BeginTail, v.Entity.EndTail, v.Entity.Name)
+		acharya = acharya + fmt.Sprintf("{\"head\":[%d,%d],\"tail\":[%d,%d],\"name\":\"%s\"},", v.Entity.BeginHead, v.Entity.EndHead, v.Entity.BeginTail, v.Entity.EndTail, v.Entity.Name)
 	}
 
 	standoff = strings.TrimSuffix(standoff, "\n")
@@ -417,6 +423,10 @@ func handleMain(fPath, annFiles, txtFiles, conf, opFile string, overwrite bool) 
 	generatedAcharya := ""
 
 	for i := range annMult {
+		filename := filepath.Base(annMult[i])
+		filename = strings.TrimSuffix(filename, filepath.Ext(filename))
+		is_test_file := strings.HasPrefix(filename, "t_")
+
 		annFile, aErr := os.Open(strings.TrimSpace(annMult[i]))
 		if aErr != nil {
 			return aErr
@@ -449,7 +459,7 @@ func handleMain(fPath, annFiles, txtFiles, conf, opFile string, overwrite bool) 
 			return err
 		}
 
-		acharya, _, err := GenerateAcharyaAndStandoff(string(txtFileData), entityArr, relArr)
+		acharya, _, err := GenerateAcharyaAndStandoff(string(txtFileData), entityArr, relArr, filename, is_test_file)
 		if err != nil {
 			return err
 		}
