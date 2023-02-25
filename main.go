@@ -324,13 +324,7 @@ func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt map[int]NumberAch
 		return "", "", err
 	}
 
-	// Add "test": true if filename starts with t_ prefix
-	test_str := ""
-	if isTestFile {
-		test_str = "\"test\":true,"
-	}
-
-	acharya := fmt.Sprintf("{\"id\":\"%s\",%s\"Data\":%s,\"Entities\":[", article_id, test_str, fmt.Sprintf("%s", escapedStr))
+	acharya := fmt.Sprintf("{\"id\":\"%s\",\"Data\":%s,\"Entities\":[", article_id, fmt.Sprintf("%s", escapedStr))
 
 	for _, v := range numberAcharyaEnt {
 		str, err := GetSubString(tData, v.Entity.Begin, v.Entity.End)
@@ -349,8 +343,10 @@ func GenerateAcharyaAndStandoff(tData string, numberAcharyaEnt map[int]NumberAch
 		acharya = acharya + fmt.Sprintf("{\"head\":[%d,%d],\"tail\":[%d,%d],\"name\":\"%s\"},", v.Entity.BeginHead, v.Entity.EndHead, v.Entity.BeginTail, v.Entity.EndTail, v.Entity.Name)
 	}
 
-	standoff = strings.TrimSuffix(standoff, "\n")
+	standoff = strings.TrimSuffix(standoff, "\r\n") // Attempt trimming \r\n
+	standoff = strings.TrimSuffix(standoff, "\n")   // Attempt trimming \n
 	acharya = strings.TrimSuffix(acharya, ",")
+	acharya = strings.ReplaceAll(acharya, "\r", "\\r")
 	acharya = strings.ReplaceAll(acharya, "\n", "\\n")
 	acharya = acharya + "]}\n"
 
